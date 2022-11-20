@@ -2,6 +2,7 @@ package sssh
 
 import (
 	"fmt"
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 	"os"
@@ -162,6 +163,80 @@ func StartInteractiveShell(client *ssh.Client) error {
 	err = session.Wait()
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+// WriteFile writes b to the target via sftp. Does not check if file is present at dst, will overwrite.
+func WriteFile(client *ssh.Client, src []byte, dst string) error {
+	session, err := sftp.NewClient(client)
+	if err != nil {
+		return err
+	}
+	defer func(session *sftp.Client) { _ = session.Close() }(session)
+
+	f, err := session.Create(dst)
+	if err != nil {
+		return fmt.Errorf("CopyFile: failed to create remote file: %s", err)
+	}
+	defer func(f *sftp.File) { _ = f.Close() }(f)
+	_, err = f.Write(src)
+	if err != nil {
+		return fmt.Errorf("CopyFile: failed to write to remote file: %s", err)
+	}
+
+	_, err = session.Lstat(dst)
+	if err != nil {
+		return fmt.Errorf("CopyFile: file is absent after successful transfer: %s", err)
+	}
+	return nil
+}
+
+// CopyFile copies a file to the target via sftp. Does not check if file is present at dst, will overwrite.
+func CopyFile(client *ssh.Client, src, dst string) error {
+	srcfile, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("CopyFile: failed to read source file: %s", err)
+	}
+	return WriteFile(client, srcfile, dst)
+}
+
+// RemoveFile removes a file or (empty) directory via sftp.
+func RemoveFile(client *ssh.Client, path string) error {
+	session, err := sftp.NewClient(client)
+	if err != nil {
+		return err
+	}
+	defer func(session *sftp.Client) { _ = session.Close() }(session)
+
+	err = session.Remove(path)
+	if err != nil {
+		return fmt.Errorf("RemoveFile: failed to remove remote file: %s", err)
+	}
+
+	_, err = session.Lstat(path)
+	if err == nil {
+		return fmt.Errorf("RemoveFile: file is still present after successful removal")
+	}
+	return nil
+}
+
+// MoveFile moves a file via sftp.
+func MoveFile(client *ssh.Client, src, dst string) error {
+	session, err := sftp.NewClient(client)
+	if err != nil {
+		return err
+	}
+	defer func(session *sftp.Client) { _ = session.Close() }(session)
+
+	err = session.Rename(src, dst)
+	if err != nil {
+		return fmt.Errorf("MoveFile: failed to move remote file: %s", err)
+	}
+
+	_, err = session.Lstat(src)
+	if err == nil {
+		return fmt.Errorf("MoveFile: old file is still present after successful move")
 	}
 	return nil
 }

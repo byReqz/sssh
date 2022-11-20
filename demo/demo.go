@@ -36,11 +36,21 @@ func main() {
 		log.Fatal(err)
 	}
 
-	buf, err := sssh.StartCommand(client, "whoami")
+	err = sssh.WriteFile(client, []byte("test321"), "demo.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	buf, err := sssh.StartCommand(client, "cat demo.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Print(string(buf))
+
+	err = sssh.RemoveFile(client, "demo.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	/*
 		buf, err = sssh.StartInteractiveCommand(client, "nano")
