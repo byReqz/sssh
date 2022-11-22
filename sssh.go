@@ -121,7 +121,7 @@ func StartInteractiveCommand(client *ssh.Client, command string) ([]byte, error)
 }
 */
 
-// StartInteractiveShell starts an interactive shell in its own pty on the given client. Returns a copy of stdin, stdout and stderr.
+// StartInteractiveShell starts an interactive shell in its own pty on the given client.
 func StartInteractiveShell(client *ssh.Client) error {
 	session, err := client.NewSession()
 	if err != nil {
@@ -167,7 +167,7 @@ func StartInteractiveShell(client *ssh.Client) error {
 }
 
 // WriteFile writes b to the target via sftp. Does not check if file is present at dst, will overwrite.
-func WriteFile(client *ssh.Client, src []byte, dst string) error {
+func WriteFile(client *ssh.Client, src []byte, dst string, fm os.FileMode) error {
 	session, err := sftp.NewClient(client)
 	if err != nil {
 		return err
@@ -183,7 +183,10 @@ func WriteFile(client *ssh.Client, src []byte, dst string) error {
 	if err != nil {
 		return fmt.Errorf("CopyFile: failed to write to remote file: %s", err)
 	}
-
+	err = f.Chmod(fm)
+	if err != nil {
+		return fmt.Errorf("CopyFile: failed to set permissions for remote file: %s", err)
+	}
 	_, err = session.Lstat(dst)
 	if err != nil {
 		return fmt.Errorf("CopyFile: file is absent after successful transfer: %s", err)
@@ -193,11 +196,16 @@ func WriteFile(client *ssh.Client, src []byte, dst string) error {
 
 // CopyFile copies a file to the target via sftp. Does not check if file is present at dst, will overwrite.
 func CopyFile(client *ssh.Client, src, dst string) error {
+	stat, err := os.Lstat(src)
+	if err != nil {
+		return fmt.Errorf("CopyFile: failed to stat source file: %s", err)
+	}
+
 	srcfile, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("CopyFile: failed to read source file: %s", err)
 	}
-	return WriteFile(client, srcfile, dst)
+	return WriteFile(client, srcfile, dst, stat.Mode())
 }
 
 // RemoveFile removes a file or (empty) directory via sftp.

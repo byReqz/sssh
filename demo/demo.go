@@ -36,18 +36,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = sssh.WriteFile(client, []byte("test321"), "demo.txt")
+	err = sssh.CopyFile(client, "demo.go", "demo.go")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	buf, err := sssh.StartCommand(client, "cat demo.txt")
+	buf, err := sssh.StartCommand(client, "cat demo.go")
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Print(string(buf))
 
-	err = sssh.RemoveFile(client, "demo.txt")
+	err = sssh.RemoveFile(client, "demo.go")
 	if err != nil {
 		log.Fatal(err)
 	}
