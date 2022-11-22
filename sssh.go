@@ -201,6 +201,11 @@ func CopyFile(client *ssh.Client, src, dst string) error {
 		return fmt.Errorf("CopyFile: failed to stat source file: %s", err)
 	}
 
+	// a trailing / implies that the file should be placed into the given directory
+	if strings.HasSuffix(dst, "/") {
+		dst = dst + stat.Name()
+	}
+
 	srcfile, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("CopyFile: failed to read source file: %s", err)
