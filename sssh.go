@@ -5,6 +5,7 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
+	"io"
 	"os"
 	"strings"
 )
@@ -211,6 +212,47 @@ func CopyFile(client *ssh.Client, src, dst string) error {
 		return fmt.Errorf("CopyFile: failed to read source file: %s", err)
 	}
 	return WriteFile(client, srcfile, dst, stat.Mode())
+}
+
+// ReadFile reads a remote file.
+func ReadFile(client *ssh.Client, path string) ([]byte, os.FileInfo, error) {
+	var (
+		buf []byte
+		fi  os.FileInfo
+	)
+
+	session, err := sftp.NewClient(client)
+	if err != nil {
+		return buf, fi, err
+	}
+	defer func(session *sftp.Client) { _ = session.Close() }(session)
+
+	fi, err = session.Lstat(path)
+	if err != nil {
+		return buf, fi, fmt.Errorf("ReadFile: could not stat remote file: %s", err)
+	}
+	f, err := session.Open(path)
+	if err != nil {
+		return buf, fi, fmt.Errorf("ReadFile: could not open remote file: %s", err)
+	}
+	buf, err = io.ReadAll(f)
+	if err != nil {
+		return buf, fi, fmt.Errorf("ReadFile: could not read remote file: %s", err)
+	}
+	return buf, fi, nil
+}
+
+// PullFile copies a remote file to a local destination.
+func PullFile(client *ssh.Client, src, dst string) error {
+	file, fi, err := ReadFile(client, src)
+	if err != nil {
+		return fmt.Errorf("PullFile: could not get remote file: %s", err)
+	}
+	err = os.WriteFile(dst, file, fi.Mode())
+	if err != nil {
+		return fmt.Errorf("PullFile: failed to write local file: %s", err)
+	}
+	return nil
 }
 
 // RemoveFile removes a file or (empty) directory via sftp.
