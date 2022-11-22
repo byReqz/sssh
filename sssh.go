@@ -130,7 +130,6 @@ func StartInteractiveShell(client *ssh.Client) error {
 	defer func(session *ssh.Session) { _ = session.Close() }(session)
 
 	modes := ssh.TerminalModes{
-		ssh.ECHO:          0,     // disable echoing
 		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
 		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
