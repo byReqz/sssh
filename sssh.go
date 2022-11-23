@@ -77,8 +77,45 @@ func StartCommand(client *ssh.Client, command string) ([]byte, error) {
 	return buf, nil
 }
 
-// StartInteractiveCommand starts a command in a pty on the given client. Writes the i/o streams to the given writers.
-func StartInteractiveCommand(client *ssh.Client, command string, stdout, stderr, stdin io.Writer) error {
+// StartInteractiveCommand starts a command in a pty on the given client.
+func StartInteractiveCommand(client *ssh.Client, command string) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer func(session *ssh.Session) { _ = session.Close() }(session)
+
+	modes := ssh.TerminalModes{
+		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
+		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
+	}
+
+	termfd, termtype, w, h, err := GetTermdata()
+	if err != nil {
+		return err
+	}
+
+	err = session.RequestPty(termtype, h, w, modes)
+	if err != nil {
+		return err
+	}
+
+	originalState, err := term.MakeRaw(termfd)
+	if err != nil {
+		return err
+	}
+	defer func(fd int, oldState *term.State) { _ = term.Restore(fd, oldState) }(termfd, originalState)
+
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+	session.Stdin = os.Stdin
+
+	err = session.Run(command)
+	return err
+}
+
+// StartInteractiveBufferedCommand starts a command in a pty on the given client. Writes the i/o streams to the given writers.
+func StartInteractiveBufferedCommand(client *ssh.Client, command string, stdout, stderr, stdin io.Writer) error {
 	session, err := client.NewSession()
 	if err != nil {
 		return err
