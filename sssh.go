@@ -77,50 +77,42 @@ func StartCommand(client *ssh.Client, command string) ([]byte, error) {
 	return buf, nil
 }
 
-/*
-// StartInteractiveCommand starts a command in a pty on the given client.
-func StartInteractiveCommand(client *ssh.Client, command string) ([]byte, error) {
-	var buf []byte
+// StartInteractiveCommand starts a command in a pty on the given client. Writes the i/o streams to the given writers.
+func StartInteractiveCommand(client *ssh.Client, command string, stdout, stderr, stdin io.Writer) error {
 	session, err := client.NewSession()
 	if err != nil {
-		return buf, err
+		return err
 	}
 	defer func(session *ssh.Session) { _ = session.Close() }(session)
 
 	modes := ssh.TerminalModes{
-		ssh.ECHO:          0,     // disable echoing
 		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
 		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
 	}
 
 	termfd, termtype, w, h, err := GetTermdata()
 	if err != nil {
-		return buf, err
+		return err
 	}
 
 	err = session.RequestPty(termtype, h, w, modes)
 	if err != nil {
-		return buf, err
+		return err
 	}
 
 	originalState, err := term.MakeRaw(termfd)
 	if err != nil {
-		return buf, err
+		return err
 	}
 	defer func(fd int, oldState *term.State) { _ = term.Restore(fd, oldState) }(termfd, originalState)
 
-	session.Stdin = os.Stdin
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
+	session.Stdout = io.MultiWriter(stdout, os.Stdout)
+	session.Stderr = io.MultiWriter(stderr, os.Stderr)
+	session.Stdin = io.TeeReader(os.Stdin, stdin)
 
-	buf, err = session.CombinedOutput(command)
-	if err != nil {
-		return buf, err
-	}
-
-	return buf, nil
+	err = session.Run(command)
+	return err
 }
-*/
 
 // StartInteractiveShell starts an interactive shell in its own pty on the given client.
 func StartInteractiveShell(client *ssh.Client) error {
@@ -165,6 +157,48 @@ func StartInteractiveShell(client *ssh.Client) error {
 		return err
 	}
 	return nil
+}
+
+// StartBufferedInteractiveShell starts an interactive shell in its own pty on the given client. Writes the i/o streams to the given writers.
+func StartBufferedInteractiveShell(client *ssh.Client, stdout, stderr, stdin io.Writer) error {
+	session, err := client.NewSession()
+	if err != nil {
+		return err
+	}
+	defer func(session *ssh.Session) { _ = session.Close() }(session)
+
+	modes := ssh.TerminalModes{
+		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
+		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
+	}
+
+	termfd, termtype, w, h, err := GetTermdata()
+	if err != nil {
+		return err
+	}
+
+	err = session.RequestPty(termtype, h, w, modes)
+	if err != nil {
+		return err
+	}
+
+	originalState, err := term.MakeRaw(termfd)
+	if err != nil {
+		return err
+	}
+	defer func(fd int, oldState *term.State) { _ = term.Restore(fd, oldState) }(termfd, originalState)
+
+	session.Stdout = io.MultiWriter(stdout, os.Stdout)
+	session.Stderr = io.MultiWriter(stderr, os.Stderr)
+	session.Stdin = io.TeeReader(os.Stdin, stdin)
+
+	err = session.Shell()
+	if err != nil {
+		return err
+	}
+
+	err = session.Wait()
+	return err
 }
 
 // WriteFile writes b to the target via sftp. Does not check if file is present at dst, will overwrite.
