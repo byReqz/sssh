@@ -248,6 +248,12 @@ func PullFile(client *ssh.Client, src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("PullFile: could not get remote file: %s", err)
 	}
+
+	// a trailing / implies that the file should be placed into the given directory
+	if strings.HasSuffix(dst, "/") {
+		dst = dst + fi.Name()
+	}
+
 	err = os.WriteFile(dst, file, fi.Mode())
 	if err != nil {
 		return fmt.Errorf("PullFile: failed to write local file: %s", err)
