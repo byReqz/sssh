@@ -7,7 +7,9 @@ import (
 	"golang.org/x/term"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 )
 
 // Connect opens a new ssh client.
@@ -77,6 +79,24 @@ func StartCommand(client *ssh.Client, command string) ([]byte, error) {
 	return buf, nil
 }
 
+// handleResize changes the remote terminal size when the process receives a SIGWINCH. It is supposed to be run in a goroutine.
+func handleResize(sigchan chan os.Signal, session *ssh.Session) {
+	signal.Notify(sigchan, syscall.SIGWINCH)
+	defer signal.Stop(sigchan)
+
+	for {
+		s := <-sigchan
+		if s == os.Kill {
+			return
+		}
+		_, _, w, h, err := GetTermdata()
+		if err != nil {
+			continue
+		}
+		_ = session.WindowChange(h, w)
+	}
+}
+
 // StartInteractiveCommand starts a command in a pty on the given client.
 func StartInteractiveCommand(client *ssh.Client, command string) error {
 	session, err := client.NewSession()
@@ -109,6 +129,10 @@ func StartInteractiveCommand(client *ssh.Client, command string) error {
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
 	session.Stdin = os.Stdin
+
+	sigchan := make(chan os.Signal)
+	go handleResize(sigchan, session)
+	defer func() { sigchan <- os.Kill }()
 
 	err = session.Run(command)
 	return err
@@ -147,6 +171,10 @@ func StartInteractiveBufferedCommand(client *ssh.Client, command string, stdout,
 	session.Stderr = io.MultiWriter(stderr, os.Stderr)
 	session.Stdin = io.TeeReader(os.Stdin, stdin)
 
+	sigchan := make(chan os.Signal)
+	go handleResize(sigchan, session)
+	defer func() { sigchan <- os.Kill }()
+
 	err = session.Run(command)
 	return err
 }
@@ -183,6 +211,10 @@ func StartInteractiveShell(client *ssh.Client) error {
 	session.Stdin = os.Stdin
 	session.Stdout = os.Stdout
 	session.Stderr = os.Stderr
+
+	sigchan := make(chan os.Signal)
+	go handleResize(sigchan, session)
+	defer func() { sigchan <- os.Kill }()
 
 	err = session.Shell()
 	if err != nil {
@@ -228,6 +260,10 @@ func StartBufferedInteractiveShell(client *ssh.Client, stdout, stderr, stdin io.
 	session.Stdout = io.MultiWriter(stdout, os.Stdout)
 	session.Stderr = io.MultiWriter(stderr, os.Stderr)
 	session.Stdin = io.TeeReader(os.Stdin, stdin)
+
+	sigchan := make(chan os.Signal)
+	go handleResize(sigchan, session)
+	defer func() { sigchan <- os.Kill }()
 
 	err = session.Shell()
 	if err != nil {
