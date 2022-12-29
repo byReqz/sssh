@@ -97,6 +97,43 @@ func handleResize(sigchan chan os.Signal, session *ssh.Session) {
 	}
 }
 
+// MakeInteractive requests a PTY to be attached to the calling terminal. The returned function can be used to restore the Terminal to the previous state (alias for term.Restore)
+func MakeInteractive(session *ssh.Session) (func(), error) {
+	modes := ssh.TerminalModes{
+		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
+		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
+	}
+
+	termfd, termtype, w, h, err := GetTermdata()
+	if err != nil {
+		return nil, err
+	}
+
+	err = session.RequestPty(termtype, h, w, modes)
+	if err != nil {
+		return nil, err
+	}
+
+	originalState, err := term.MakeRaw(termfd)
+	if err != nil {
+		return nil, err
+	}
+
+	session.Stdout = os.Stdout
+	session.Stderr = os.Stderr
+	session.Stdin = os.Stdin
+
+	sigchan := make(chan os.Signal)
+	go handleResize(sigchan, session)
+
+	closer := func() {
+		_ = term.Restore(termfd, originalState) // restore terminal to previous state
+		sigchan <- os.Kill                      // terminate resizing goroutine
+	}
+
+	return closer, nil
+}
+
 // StartInteractiveCommand starts a command in a pty on the given client.
 func StartInteractiveCommand(client *ssh.Client, command string) error {
 	session, err := client.NewSession()
@@ -105,34 +142,11 @@ func StartInteractiveCommand(client *ssh.Client, command string) error {
 	}
 	defer func(session *ssh.Session) { _ = session.Close() }(session)
 
-	modes := ssh.TerminalModes{
-		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
-		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
-	}
-
-	termfd, termtype, w, h, err := GetTermdata()
+	restore, err := MakeInteractive(session)
 	if err != nil {
 		return err
 	}
-
-	err = session.RequestPty(termtype, h, w, modes)
-	if err != nil {
-		return err
-	}
-
-	originalState, err := term.MakeRaw(termfd)
-	if err != nil {
-		return err
-	}
-	defer func(fd int, oldState *term.State) { _ = term.Restore(fd, oldState) }(termfd, originalState)
-
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
-	session.Stdin = os.Stdin
-
-	sigchan := make(chan os.Signal)
-	go handleResize(sigchan, session)
-	defer func() { sigchan <- os.Kill }()
+	defer restore()
 
 	err = session.Run(command)
 	return err
@@ -146,34 +160,15 @@ func StartInteractiveBufferedCommand(client *ssh.Client, command string, stdout,
 	}
 	defer func(session *ssh.Session) { _ = session.Close() }(session)
 
-	modes := ssh.TerminalModes{
-		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
-		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
-	}
-
-	termfd, termtype, w, h, err := GetTermdata()
+	restore, err := MakeInteractive(session)
 	if err != nil {
 		return err
 	}
-
-	err = session.RequestPty(termtype, h, w, modes)
-	if err != nil {
-		return err
-	}
-
-	originalState, err := term.MakeRaw(termfd)
-	if err != nil {
-		return err
-	}
-	defer func(fd int, oldState *term.State) { _ = term.Restore(fd, oldState) }(termfd, originalState)
+	defer restore()
 
 	session.Stdout = io.MultiWriter(stdout, os.Stdout)
 	session.Stderr = io.MultiWriter(stderr, os.Stderr)
 	session.Stdin = io.TeeReader(os.Stdin, stdin)
-
-	sigchan := make(chan os.Signal)
-	go handleResize(sigchan, session)
-	defer func() { sigchan <- os.Kill }()
 
 	err = session.Run(command)
 	return err
@@ -187,34 +182,11 @@ func StartInteractiveShell(client *ssh.Client) error {
 	}
 	defer func(session *ssh.Session) { _ = session.Close() }(session)
 
-	modes := ssh.TerminalModes{
-		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
-		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
-	}
-
-	termfd, termtype, w, h, err := GetTermdata()
+	restore, err := MakeInteractive(session)
 	if err != nil {
 		return err
 	}
-
-	err = session.RequestPty(termtype, h, w, modes)
-	if err != nil {
-		return err
-	}
-
-	originalState, err := term.MakeRaw(termfd)
-	if err != nil {
-		return err
-	}
-	defer func(fd int, oldState *term.State) { _ = term.Restore(fd, oldState) }(termfd, originalState)
-
-	session.Stdin = os.Stdin
-	session.Stdout = os.Stdout
-	session.Stderr = os.Stderr
-
-	sigchan := make(chan os.Signal)
-	go handleResize(sigchan, session)
-	defer func() { sigchan <- os.Kill }()
+	defer restore()
 
 	err = session.Shell()
 	if err != nil {
@@ -236,34 +208,15 @@ func StartBufferedInteractiveShell(client *ssh.Client, stdout, stderr, stdin io.
 	}
 	defer func(session *ssh.Session) { _ = session.Close() }(session)
 
-	modes := ssh.TerminalModes{
-		ssh.TTY_OP_ISPEED: 14400, // input speed = 14.4kbaud
-		ssh.TTY_OP_OSPEED: 14400, // output speed = 14.4kbaud
-	}
-
-	termfd, termtype, w, h, err := GetTermdata()
+	restore, err := MakeInteractive(session)
 	if err != nil {
 		return err
 	}
-
-	err = session.RequestPty(termtype, h, w, modes)
-	if err != nil {
-		return err
-	}
-
-	originalState, err := term.MakeRaw(termfd)
-	if err != nil {
-		return err
-	}
-	defer func(fd int, oldState *term.State) { _ = term.Restore(fd, oldState) }(termfd, originalState)
+	defer restore()
 
 	session.Stdout = io.MultiWriter(stdout, os.Stdout)
 	session.Stderr = io.MultiWriter(stderr, os.Stderr)
 	session.Stdin = io.TeeReader(os.Stdin, stdin)
-
-	sigchan := make(chan os.Signal)
-	go handleResize(sigchan, session)
-	defer func() { sigchan <- os.Kill }()
 
 	err = session.Shell()
 	if err != nil {
