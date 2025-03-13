@@ -22,7 +22,7 @@ func main() {
 			ssh.Password(pass),
 			ssh.PasswordCallback(fallbackfunc),
 		},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // #nosec G106 -- this is a demo
 	}
 
 	client, err := sssh.Connect(os.Args[1]+":22", conf)
