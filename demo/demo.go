@@ -1,3 +1,4 @@
+// This is a demo package for sssh.
 package main
 
 import (
@@ -29,7 +30,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer client.Close()
+	defer func(){ _= client.Close() }()
 
 	err = sssh.StartInteractiveShell(client)
 	if err != nil {
