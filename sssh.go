@@ -1,3 +1,4 @@
+// Package sssh provides a simple wrapper for common SSH operations.
 package sssh
 
 import (
@@ -237,20 +238,20 @@ func WriteFile(client *ssh.Client, src []byte, dst string, fm os.FileMode) error
 
 	f, err := session.Create(dst)
 	if err != nil {
-		return fmt.Errorf("CopyFile: failed to create remote file: %s", err)
+		return fmt.Errorf("CopyFile: failed to create remote file: %w", err)
 	}
 	defer func(f *sftp.File) { _ = f.Close() }(f)
 	_, err = f.Write(src)
 	if err != nil {
-		return fmt.Errorf("CopyFile: failed to write to remote file: %s", err)
+		return fmt.Errorf("CopyFile: failed to write to remote file: %w", err)
 	}
 	err = f.Chmod(fm)
 	if err != nil {
-		return fmt.Errorf("CopyFile: failed to set permissions for remote file: %s", err)
+		return fmt.Errorf("CopyFile: failed to set permissions for remote file: %w", err)
 	}
 	_, err = session.Lstat(dst)
 	if err != nil {
-		return fmt.Errorf("CopyFile: file is absent after successful transfer: %s", err)
+		return fmt.Errorf("CopyFile: file is absent after successful transfer: %w", err)
 	}
 	return nil
 }
@@ -259,7 +260,7 @@ func WriteFile(client *ssh.Client, src []byte, dst string, fm os.FileMode) error
 func CopyFile(client *ssh.Client, src, dst string) error {
 	stat, err := os.Lstat(src)
 	if err != nil {
-		return fmt.Errorf("CopyFile: failed to stat source file: %s", err)
+		return fmt.Errorf("CopyFile: failed to stat source file: %w", err)
 	}
 
 	// a trailing / implies that the file should be placed into the given directory
@@ -267,9 +268,9 @@ func CopyFile(client *ssh.Client, src, dst string) error {
 		dst = dst + stat.Name()
 	}
 
-	srcfile, err := os.ReadFile(src)
+	srcfile, err := os.ReadFile(src) //gosec:disable G304 -- caller has to make sure the path is correct
 	if err != nil {
-		return fmt.Errorf("CopyFile: failed to read source file: %s", err)
+		return fmt.Errorf("CopyFile: failed to read source file: %w", err)
 	}
 	return WriteFile(client, srcfile, dst, stat.Mode())
 }
@@ -289,15 +290,15 @@ func ReadFile(client *ssh.Client, path string) ([]byte, os.FileInfo, error) {
 
 	fi, err = session.Lstat(path)
 	if err != nil {
-		return buf, fi, fmt.Errorf("ReadFile: could not stat remote file: %s", err)
+		return buf, fi, fmt.Errorf("ReadFile: could not stat remote file: %w", err)
 	}
 	f, err := session.Open(path)
 	if err != nil {
-		return buf, fi, fmt.Errorf("ReadFile: could not open remote file: %s", err)
+		return buf, fi, fmt.Errorf("ReadFile: could not open remote file: %w", err)
 	}
 	buf, err = io.ReadAll(f)
 	if err != nil {
-		return buf, fi, fmt.Errorf("ReadFile: could not read remote file: %s", err)
+		return buf, fi, fmt.Errorf("ReadFile: could not read remote file: %w", err)
 	}
 	return buf, fi, nil
 }
@@ -306,7 +307,7 @@ func ReadFile(client *ssh.Client, path string) ([]byte, os.FileInfo, error) {
 func PullFile(client *ssh.Client, src, dst string) error {
 	file, fi, err := ReadFile(client, src)
 	if err != nil {
-		return fmt.Errorf("PullFile: could not get remote file: %s", err)
+		return fmt.Errorf("PullFile: could not get remote file: %w", err)
 	}
 
 	// a trailing / implies that the file should be placed into the given directory
@@ -316,7 +317,7 @@ func PullFile(client *ssh.Client, src, dst string) error {
 
 	err = os.WriteFile(dst, file, fi.Mode())
 	if err != nil {
-		return fmt.Errorf("PullFile: failed to write local file: %s", err)
+		return fmt.Errorf("PullFile: failed to write local file: %w", err)
 	}
 	return nil
 }
@@ -331,7 +332,7 @@ func RemoveFile(client *ssh.Client, path string) error {
 
 	err = session.Remove(path)
 	if err != nil {
-		return fmt.Errorf("RemoveFile: failed to remove remote file: %s", err)
+		return fmt.Errorf("RemoveFile: failed to remove remote file: %w", err)
 	}
 
 	_, err = session.Lstat(path)
@@ -351,7 +352,7 @@ func MoveFile(client *ssh.Client, src, dst string) error {
 
 	err = session.Rename(src, dst)
 	if err != nil {
-		return fmt.Errorf("MoveFile: failed to move remote file: %s", err)
+		return fmt.Errorf("MoveFile: failed to move remote file: %w", err)
 	}
 
 	_, err = session.Lstat(src)
